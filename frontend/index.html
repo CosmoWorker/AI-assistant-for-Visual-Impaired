@@ -1,13 +1,126 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CosmoWorker AI Assistant (FastAPI)</title>
+    <style>
+        body { font-family: sans-serif; }
+        #video-container { margin-bottom: 20px; }
+        #caption-output { font-size: 1.2em; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1>CosmoWorker AI Assistant (FastAPI)</h1>
+
+    <div id="video-container">
+        <video id="webcam-video" width="400" height="300" autoplay></video>
+        <canvas id="hidden-canvas" style="display: none;"></canvas>
+    </div>
+
+    <div id="caption-output"></div>
+
+    <button id="start-button">Start Streaming</button>
+    <button id="stop-button" disabled>Stop Streaming</button>
+
+    <script>
+        const websocket = new WebSocket('ws://localhost:8000/ws'); // Connect to FastAPI backend
+
+        const videoElement = document.getElementById('webcam-video');
+        const captionOutput = document.getElementById('caption-output');
+        const startButton = document.getElementById('start-button');
+        const stopButton = document.getElementById('stop-button');
+        const hiddenCanvas = document.getElementById('hidden-canvas');
+        const canvasContext = hiddenCanvas.getContext('2d');
+        let mediaStream = null;
+        let isStreaming = false;
+
+        websocket.onopen = () => {
+            console.log('Connected to backend (FastAPI)!');
+            captionOutput.textContent = 'Waiting for first caption...'; // Initial message
+        };
+
+        websocket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.status) {
+                    console.log('Backend Status:', data.status);
+                    if (captionOutput.textContent === 'Waiting for first caption...') {
+                        captionOutput.textContent = ''; // Clear initial message on first status
+                    }
+                }
+                if (data.caption && data.caption.text) {
+                    console.log('Received caption:', data.caption.text);
+                    captionOutput.textContent = data.caption.text;
+                    speakCaption(data.caption.text);
+                }
+            } catch (error) {
+                console.error('Error processing message from backend:', error);
+            }
+        };
+
+        websocket.onclose = () => {
+            console.log('Disconnected from backend (FastAPI).');
+            captionOutput.textContent = 'Disconnected from backend.';
+        };
+
+        websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            captionOutput.textContent = 'WebSocket error.';
+        };
+
+        async function startWebcam() {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement.srcObject = mediaStream;
+                videoElement.onloadedmetadata = () => {
+                    hiddenCanvas.width = videoElement.videoWidth;
+                    hiddenCanvas.height = videoElement.videoHeight;
+                };
+                isStreaming = true;
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                startCapturing();
+            } catch (error) {
+                console.error('Error accessing webcam:', error);
+                captionOutput.textContent = 'Error accessing webcam.';
+            }
+        }
+
+        function stopWebcam() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+                isStreaming = false;
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                clearInterval(captureInterval);
+                captionOutput.textContent = '';
+            }
+        }
+
+        let captureInterval;
+        function startCapturing() {
+            captureInterval = setInterval(() => {
+                if (isStreaming && videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+                    canvasContext.drawImage(videoElement, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                    const imageDataURL = hiddenCanvas.toDataURL('image/jpeg', 0.8);
+                    // Send the base64 string to the backend
+                    websocket.send(JSON.stringify({ frame: imageDataURL.split(',')[1] }));
+                }
+            }, 1000); // Capture and send a frame every 1 second
+        }
+
+        function speakCaption(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                speechSynthesis.speak(utterance);
+            } else {
+                console.warn('Speech synthesis is not supported in this browser.');
+                captionOutput.textContent += ' (Audio not supported)';
+            }
+        }
+
+        startButton.addEventListener('click', startWebcam);
+        stopButton.addEventListener('click', stopWebcam);
+    </script>
+</body>
 </html>
