@@ -1,0 +1,3 @@
+[submodule "BLIP_CAM"]
+	path = BLIP_CAM
+	url = git@github.com:zawawiAI/BLIP_CAM.git
