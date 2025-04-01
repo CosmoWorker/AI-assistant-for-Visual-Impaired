@@ -7,4 +7,7 @@
 Running on CPU, but ideally should be on GPU
 
 
-<video controls src="assets/2025-03-29 21-05-07 (online-video-cutter.com).mp4" title="Title"></video>
+
+
+https://github.com/user-attachments/assets/dd2c11f6-ab2f-44f5-99f8-38a458127a36
+
